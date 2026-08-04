@@ -190,9 +190,9 @@ class EnhancedHAN(nn.Module):
         out = self.out_layer(z)
         return out
 
-class GP_ncVar(nn.Module):
+class McV2G(nn.Module):
     def __init__(self,data, in_dim, hidden_dim, out_dim, num_heads, num_layers, dropout):
-        super(GP_ncVar, self).__init__()
+        super(McV2G, self).__init__()
         self.CGCN = GCN(in_dim, hidden_dim, out_dim, dropout)
         self.real_graph = EnhancedHAN(in_dim, hidden_dim, out_dim, data_real, num_layers, num_heads, dropout)
         self.feature_graph = EnhancedHAN(in_dim, hidden_dim, out_dim, data_str, num_layers, num_heads, dropout)
@@ -300,7 +300,7 @@ if __name__ == '__main__':
         labels_val = torch.tensor(val_labels, dtype=torch.float).to(device)
         
         #model
-        dual_graph_transformer = GP_ncVar(data_real, in_dim=in_dim, hidden_dim=hidden_dim, out_dim=out_dim,
+        dual_graph_transformer = McV2G(data_real, in_dim=in_dim, hidden_dim=hidden_dim, out_dim=out_dim,
                                                     num_heads=num_heads, num_layers=num_layers, dropout=dropout).to(device)
         link_predictor = LinkPredictorWithContrastiveLearning(dual_graph_transformer, input_dim=in_dim, hidden_dim=hidden_dim, temperature=temperature).to(device)
         

@@ -1,10 +1,10 @@
-# GP-ncVar
+# McV2G
 
 ## 1. Project overview
-GP-ncVar is a graph neural network framework for predicting associations between single nucleotide polymorphisms (SNPs) and genes. It builds and trains a dual-graph model that leverages a real interaction graph and a feature-based (sequence/similarity) graph, and uses contrastive learning together with link prediction. The implementation uses PyTorch and PyTorch Geometric (PyG).
+McV2G is a graph neural network framework for predicting associations between single nucleotide polymorphisms (SNPs) and genes. It builds and trains a dual-graph model that leverages a real interaction graph and a feature-based (sequence/similarity) graph, and uses contrastive learning together with link prediction. The implementation uses PyTorch and PyTorch Geometric (PyG).
 
 ## 2. Repository structure (key files)
-- `GP-ncVar.py`: Main script containing model definitions and training loop with cross-validation (includes model classes, training, and evaluation logic).
+- `McV2G.py`: Main script containing model definitions and training loop with cross-validation (includes model classes, training, and evaluation logic).
 - `Evaluation.py`: Script to compute ranking-based evaluation metrics (Precision@K, Recall@K, MAP@K, NDCG@K) from prediction outputs in `Result/`.
 - `STAD/`: Example dataset folder containing files required by the scripts:
   - `adj_real_2.txt`: Real adjacency matrix (upper-triangular or symmetric format).
@@ -18,15 +18,15 @@ GP-ncVar is a graph neural network framework for predicting associations between
 - `Result/`: Output directory for prediction files. Example files: `prediction_0_STAD.txt` ... `prediction_4_STAD.txt` (one per CV fold/run).
 
 ## Method (Overview)
-The following summarizes the main idea of GP-ncVar and points to a schematic (Figure 1) illustrating the framework.
+The following summarizes the main idea of McV2G and points to a schematic (Figure 1) illustrating the framework.
 
-To address limitations in current studies, we propose GP-ncVar, a multi-channel graph convolutional network (McGCN) framework for gene prioritization at GWAS variants. Specifically, GP-ncVar is designed with three key points:
+To address limitations in current studies, we propose McV2G, a multi-channel graph convolutional network (McGCN) framework for gene prioritization at GWAS variants. Specifically, McV2G is designed with three key points:
 
 - (i) It explicitly models the synergistic effects of multiple loci rather than considering the impact of each SNP in isolation.
 - (ii) It systematically integrates diverse types of genetic relationships by constructing an SNP–gene heterogeneous network and a prior sequence-similarity network, thereby capturing regulatory mechanisms at different levels.
-- (iii) It introduces a McGCN to capture key genetic information from the SNP–gene heterogeneous network and the sequence-similarity prior network. The shared channel employs parameter sharing and a contrastive loss to achieve cross-network feature alignment. Meanwhile, the personalized channel incorporates a multi-level attention mechanism to capture key genetic information. Based on the above techniques, GP-ncVar empowers the discovery of complex genetic relationships.
+- (iii) It introduces a McGCN to capture key genetic information from the SNP–gene heterogeneous network and the sequence-similarity prior network. The shared channel employs parameter sharing and a contrastive loss to achieve cross-network feature alignment. Meanwhile, the personalized channel incorporates a multi-level attention mechanism to capture key genetic information. Based on the above techniques, McV2G empowers the discovery of complex genetic relationships.
 
-![Figure 1 — GP-ncVar schematic](Result/fig1.png)
+![Figure 1 — McV2G schematic](Result/fig1.png)
 
 ## 3. Requirements & dependencies
 Recommended Python: 3.8+.
@@ -57,15 +57,15 @@ pip install torch-geometric
 If `pip install torch-geometric` fails, follow the platform-specific installation instructions at https://pytorch-geometric.readthedocs.io/.
 
 ## 4. Quick start: training
-Run training from the repository root (where `GP-ncVar.py` and `STAD/` are located):
+Run training from the repository root (where `McV2G.py` and `STAD/` are located):
 
 ```bash
-python GP-ncVar.py --dataset STAD --epochs 200 --in_dim 128 --hidden_dim 256 --out_dim 128 --dropout 0.4 --num_heads 4 --num_layers 4 --learning_rate 0.007 --temperature 0.1 --patience 10 --t 0.1 --k 3
+python McV2G.py --dataset STAD --epochs 200 --in_dim 128 --hidden_dim 256 --out_dim 128 --dropout 0.4 --num_heads 4 --num_layers 4 --learning_rate 0.007 --temperature 0.1 --patience 10 --t 0.1 --k 3
 ```
 
 Notes on arguments:
 - `--dataset`: name of the dataset folder (default: `STAD`).
-- Other flags correspond to `args_parser()` inside `GP-ncVar.py` and can be tuned as needed.
+- Other flags correspond to `args_parser()` inside `McV2G.py` and can be tuned as needed.
 
 After training, the script will produce prediction files in `Result/` (for example `prediction_0_STAD.txt`, etc.). These files are used by the evaluation script.
 
@@ -85,8 +85,8 @@ python Evaluation.py
 ## 7. Troubleshooting
 - CUDA not found: install a PyTorch build that includes CUDA matching your system, or run on CPU.
 - PyG installation issues: use the PyG installation helper and choose the correct wheel for your PyTorch and CUDA versions.
-- File path or parsing issues: `GP-ncVar.py` constructs dataset paths relative to its file location. Ensure `STAD/` exists and files use expected delimiters/encodings.
-- Shape/type mismatch errors: verify `node_feature.txt` and `feature_str.txt` have the expected shapes and that SNP/gene indexing matches assumptions in `GP-ncVar.py`.
+- File path or parsing issues: `McV2G.py` constructs dataset paths relative to its file location. Ensure `STAD/` exists and files use expected delimiters/encodings.
+- Shape/type mismatch errors: verify `node_feature.txt` and `feature_str.txt` have the expected shapes and that SNP/gene indexing matches assumptions in `McV2G.py`.
 
 ## 8. License & contact
 No license file is included in this repository. Please confirm licensing with the project owner before reuse or redistribution.
