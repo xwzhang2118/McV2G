@@ -1,4 +1,5 @@
 import os
+import random
 import torch
 import argparse
 import numpy as np
@@ -13,43 +14,97 @@ from sklearn.metrics import auc, average_precision_score, f1_score, roc_auc_scor
 from sklearn.neighbors import kneighbors_graph
 
 
+def set_seed(seed: int):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+
+
 def args_parser():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--dataset', type=str, default='STAD', help='Device to use')
+    parser.add_argument('--dataset', type=str, default='STAD', help='Dataset name label for output files')
+    parser.add_argument('--data_dir', type=str, default='', help='Data directory (default: ./STAD)')
+    parser.add_argument('--output_dir', type=str, default='', help='Prediction output directory (default: ./Result)')
+    parser.add_argument('--pred_suffix', type=str, default='', help='Suffix for prediction files, e.g. _tune_baseline')
+    parser.add_argument('--device', type=str, default='cuda:0', help='cuda:0 / cuda:1 / cpu')
     parser.add_argument('--epochs', type=int, default=200, help='Number of epochs to train')
     parser.add_argument('--in_dim', type=int, default=128, help='Number of input features')
     parser.add_argument('--hidden_dim', type=int, default=256, help='Number of hidden units')
     parser.add_argument('--out_dim', type=int, default=128, help='Number of output units')
     
-    parser.add_argument('--dropout', type=float, default=0.4, help='Dropout rate')
+    parser.add_argument('--dropout', type=float, default=0.5, help='Dropout rate')
     parser.add_argument('--num_heads', type=int, default=4, help='Number of attention heads')
     parser.add_argument('--num_layers', type=int, default=4, help='Number of GCN layers')
-    parser.add_argument('--learning_rate', type=float, default=0.007, help='Learning rate')
-    parser.add_argument('--temperature', type=float, default=0.1, help='Learning rate')
-    parser.add_argument('--patience', type=int, default=10, help='Learning rate')
-    parser.add_argument('--t', type=float, default=0.1, help='Device to use')
-    parser.add_argument('--k', type=int, default=3, help='Device to use')
+    parser.add_argument('--learning_rate', type=float, default=0.005, help='Learning rate')
+    parser.add_argument('--weight_decay', type=float, default=1e-4, help='Adam weight decay')
+    parser.add_argument('--temperature', type=float, default=0.1, help='Contrastive temperature')
+    parser.add_argument('--patience', type=int, default=15, help='Early stopping patience')
+    parser.add_argument('--t', type=float, default=0.1, help='Contrastive loss weight')
+    parser.add_argument('--k', type=int, default=3, help='kNN neighbors for sequence graph')
+    parser.add_argument('--seed', type=int, default=42, help='Random seed')
     args = parser.parse_args()
     return args
 
+
+def build_data_real(node_feature_np, n_snp, adj_real_np):
+    pairs = np.vstack(np.where(np.triu(adj_real_np) == 1)).T
+    snp_gene = pairs[(pairs[:, 0] < n_snp) & (pairs[:, 1] >= n_snp)]
+    snp_gene_idx = (
+        np.vstack((snp_gene[:, 0], snp_gene[:, 1] - n_snp)).T
+        if len(snp_gene)
+        else np.zeros((0, 2), dtype=int)
+    )
+    data = HeteroData()
+    data['snp'].x = torch.tensor(node_feature_np[:n_snp], dtype=torch.float)
+    data['gene'].x = torch.tensor(node_feature_np[n_snp:], dtype=torch.float)
+    data['snp', 'to', 'gene'].edge_index = torch.tensor(
+        snp_gene_idx, dtype=torch.long
+    ).t().contiguous()
+    return data
+
+
 def load_data(args, device):
-    # load test data
     current_file_path = os.path.dirname(os.path.abspath(__file__))
-    test_edge = pd.read_csv(current_file_path + '/' + args.dataset +'/test_edge_name.txt', sep=' ', header=None).values
-    test_edge_index = pd.read_table(current_file_path + '/' +args.dataset + "/test_edge_index.txt", sep=' ', header=None).values
-    node_feature = pd.read_csv(current_file_path + '/' + args.dataset + '/node_feature.txt', sep=' ', header=None).values
-    snp = pd.read_table(current_file_path + '/' + args.dataset + "/snp_list.txt", sep='\t').values[:, 0]
+    data_dir = args.data_dir or os.path.join(current_file_path, 'STAD')
+    data_dir = os.path.abspath(data_dir)
+
+    test_edge = pd.read_csv(os.path.join(data_dir, 'test_edge_name.txt'), sep=' ', header=None).values
+    test_edge_index = pd.read_table(
+        os.path.join(data_dir, 'test_edge_index.txt'), sep=' ', header=None
+    ).values
+    node_feature = pd.read_csv(
+        os.path.join(data_dir, 'node_feature.txt'), sep=' ', header=None
+    ).values
+    snp = pd.read_table(os.path.join(data_dir, 'snp_list.txt'), sep='\t').values[:, 0]
     
-    # load real graph
-    adj_real = pd.read_table(current_file_path + '/' + args.dataset + '/adj_real_2.txt', sep=' ', header=None).values
+    adj_real = pd.read_table(
+        os.path.join(data_dir, 'adj_real_2.txt'), sep=' ', header=None
+    ).values
     snp_gene_real = np.where(np.triu(adj_real) == 1)
-    data_real = torch.load(current_file_path + '/' + args.dataset + '/data_2.pth')
+    pth_path = os.path.join(data_dir, 'data_2.pth')
+    if os.path.exists(pth_path):
+        try:
+            data_real = torch.load(pth_path, weights_only=False)
+        except TypeError:
+            data_real = torch.load(pth_path)
+    else:
+        data_real = build_data_real(node_feature, len(snp), adj_real)
 
     print(data_real)
 
-    #load sequence graph
     k = args.k
-    feature_str = pd.read_table(current_file_path + '/' + args.dataset + '/feature_str.txt', sep=' ', header=None).values
+    feature_str = pd.read_table(os.path.join(data_dir, 'feature_str.txt'), sep=' ', header=None).values
+    feature_str = np.nan_to_num(feature_str, nan=0.0, posinf=0.0, neginf=0.0)
+    if feature_str.shape[0] != node_feature.shape[0]:
+        # align rows to node_feature size
+        n = node_feature.shape[0]
+        if feature_str.shape[0] > n:
+            feature_str = feature_str[:n]
+        else:
+            pad = np.zeros((n - feature_str.shape[0], feature_str.shape[1]), dtype=feature_str.dtype)
+            feature_str = np.vstack([feature_str, pad])
     adj_str= kneighbors_graph(feature_str, k, mode='connectivity', include_self=False).toarray()
     str_inter = np.where(np.triu(adj_str) == 1)
     edges = np.vstack(str_inter).T
@@ -77,7 +132,8 @@ def load_data(args, device):
     return  data_real, snp_gene_real, node_feature, adj_real, data_str, str_inter, feature_str, adj_str, test_edge_index, test_edge, len(snp)
     
 
-def get_positive_negative_samples(adj_real, test, lenth):
+def get_positive_negative_samples(adj_real, test, lenth, seed=42):
+    rng = np.random.default_rng(seed)
     positive_samples = np.array(np.where(np.triu(adj_real == 1)))
     negative_samples = np.array(np.where(np.triu(adj_real == 0)))
     condition_pos = np.where((positive_samples[0] < lenth ) & (positive_samples[1] >= lenth))
@@ -104,13 +160,17 @@ def get_positive_negative_samples(adj_real, test, lenth):
         raise ValueError("No valid negative samples found after filtering out test set.")
     
     num_positive_samples = positive_samples.shape[1]
-    negative_sample_indices = np.random.choice(negative_samples_filtered.shape[1], num_positive_samples*2, replace=True)
+    negative_sample_indices = rng.choice(
+        negative_samples_filtered.shape[1], num_positive_samples * 2, replace=True
+    )
     negative_samples = negative_samples_filtered[:, negative_sample_indices]
 
     samples = np.hstack([positive_samples, negative_samples]).T
-    labels = np.hstack([np.ones(num_positive_samples), np.zeros(num_positive_samples)])
+    labels = np.hstack(
+        [np.ones(num_positive_samples), np.zeros(num_positive_samples * 2)]
+    )
     
-    shuffle_indices = np.random.permutation(len(labels))
+    shuffle_indices = rng.permutation(len(labels))
     samples = samples[shuffle_indices]
     labels = labels[shuffle_indices]
     
@@ -191,11 +251,17 @@ class EnhancedHAN(nn.Module):
         return out
 
 class McV2G(nn.Module):
-    def __init__(self,data, in_dim, hidden_dim, out_dim, num_heads, num_layers, dropout):
+    def __init__(
+        self, data_real_graph, data_str_graph, in_dim, hidden_dim, out_dim, num_heads, num_layers, dropout
+    ):
         super(McV2G, self).__init__()
         self.CGCN = GCN(in_dim, hidden_dim, out_dim, dropout)
-        self.real_graph = EnhancedHAN(in_dim, hidden_dim, out_dim, data_real, num_layers, num_heads, dropout)
-        self.feature_graph = EnhancedHAN(in_dim, hidden_dim, out_dim, data_str, num_layers, num_heads, dropout)
+        self.real_graph = EnhancedHAN(
+            in_dim, hidden_dim, out_dim, data_real_graph, num_layers, num_heads, dropout
+        )
+        self.feature_graph = EnhancedHAN(
+            in_dim, hidden_dim, out_dim, data_str_graph, num_layers, num_heads, dropout
+        )
         self.attention = Attention(in_dim)
         self.output_proj = nn.Linear(3*in_dim, out_dim)
 
@@ -252,15 +318,42 @@ class LinkPredictorWithContrastiveLearning(nn.Module):
     
 
 
+def save_predictions(test_edge, test_probabilities, output_path):
+    out = np.hstack([test_edge, test_probabilities.reshape(-1, 1)])
+    df = pd.DataFrame(out, columns=['region', 'gene', 'pred_score'])
+    df = (
+        df.groupby('region', group_keys=False)
+        .apply(lambda x: x.sort_values('pred_score', ascending=False))
+        .reset_index(drop=True)
+    )
+    df['rank'] = df.groupby('region').cumcount() + 1
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    df[['region', 'gene', 'pred_score', 'rank']].to_csv(
+        output_path, sep=' ', header=False, index=False
+    )
+
+
 if __name__ == '__main__':
-    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     args = args_parser()
+    if args.device.startswith('cuda') and torch.cuda.is_available():
+        device = torch.device(args.device)
+    else:
+        device = torch.device('cpu')
+    set_seed(args.seed)
+    current_file_path = os.path.dirname(os.path.abspath(__file__))
+    output_dir = args.output_dir or os.path.join(current_file_path, 'Result')
+    output_dir = os.path.abspath(output_dir)
+    print(f"device={device} data_dir={args.data_dir or '(default)'} output_dir={output_dir}")
+
     data_real, snp_gene_real, node_feature, adj_real, data_str, str_inter, feature_str, adj_feature, test_edge_index, test_edge, len_snp = load_data(args, device)
-    samples, labels = get_positive_negative_samples(adj_real, test_edge_index, len_snp)
+    samples, labels = get_positive_negative_samples(
+        adj_real, test_edge_index, len_snp, seed=args.seed
+    )
     samples, labels = np.array(samples), np.array(labels)
+    test_edge_index_t = torch.tensor(test_edge_index, dtype=torch.long).to(device)
 
     # 5-cv
-    kf = KFold(n_splits=5, shuffle=True, random_state=42)
+    kf = KFold(n_splits=5, shuffle=True, random_state=args.seed)
     all_fold_auc = []
     all_fold_aupr = []
     all_fold_f1 = []
@@ -286,30 +379,37 @@ if __name__ == '__main__':
     adj_real = adj_real + np.eye(adj_real.shape[0])
     adj_real = torch.tensor(adj_real, dtype=torch.float).to(device)
 
+    data_real = data_real.to(device)
+    data_str = data_str.to(device)
+
     for fold, (train_index, val_index) in enumerate(kf.split(samples)):
         print(f"\nFold {fold + 1}")
+        set_seed(args.seed + fold)
 
         train_samples, val_samples = samples[train_index], samples[val_index]
         train_labels, val_labels = labels[train_index], labels[val_index]
         
-        data_real = data_real.to(device)
-        data_str = data_str.to(device)
         edge_index_train = torch.tensor(train_samples, dtype=torch.long).to(device)
         labels_train = torch.tensor(train_labels, dtype=torch.float).to(device)
         edge_index_val = torch.tensor(val_samples, dtype=torch.long).to(device)
         labels_val = torch.tensor(val_labels, dtype=torch.float).to(device)
         
-        #model
-        dual_graph_transformer = McV2G(data_real, in_dim=in_dim, hidden_dim=hidden_dim, out_dim=out_dim,
-                                                    num_heads=num_heads, num_layers=num_layers, dropout=dropout).to(device)
-        link_predictor = LinkPredictorWithContrastiveLearning(dual_graph_transformer, input_dim=in_dim, hidden_dim=hidden_dim, temperature=temperature).to(device)
+        dual_graph_transformer = McV2G(
+            data_real, data_str, in_dim=in_dim, hidden_dim=hidden_dim, out_dim=out_dim,
+            num_heads=num_heads, num_layers=num_layers, dropout=dropout,
+        ).to(device)
+        link_predictor = LinkPredictorWithContrastiveLearning(
+            dual_graph_transformer, input_dim=out_dim, hidden_dim=hidden_dim, temperature=temperature
+        ).to(device)
         
-        optimizer = torch.optim.Adam(link_predictor.parameters(), lr=learning_rate)
+        optimizer = torch.optim.Adam(
+            link_predictor.parameters(), lr=learning_rate, weight_decay=args.weight_decay
+        )
         criterion = nn.BCELoss()
         
         best_val_loss = float('inf')
         trigger_times = 0
-        # training
+        best_state = None
         for epoch in range(epochs):
             link_predictor.train()
             optimizer.zero_grad()
@@ -331,17 +431,17 @@ if __name__ == '__main__':
                 labels_val_np = labels_val.cpu().numpy()
                 val_loss = criterion(torch.tensor(val_predictions, dtype=torch.float, device=device), labels_val).item()
             
-            # early stopping
             if val_loss < best_val_loss:
                 best_val_loss = val_loss
                 trigger_times = 0
+                best_state = {k: v.detach().cpu().clone() for k, v in link_predictor.state_dict().items()}
             else:
                 trigger_times += 1
                 if trigger_times >= patience:
                     print(f"Early stopping at epoch {epoch} due to no improvement in validation loss for {patience} epochs.")
                     break 
                 
-            # AUC、AUPR和F1, ACC, 
+            # AUC, AUPR, F1, ACC
             auc = roc_auc_score(labels_val_np, val_predictions)
             aupr = average_precision_score(labels_val_np, val_predictions)
             f1 = f1_score(labels_val_np, (val_predictions > 0.5).astype(int))
@@ -354,39 +454,32 @@ if __name__ == '__main__':
         all_fold_f1.append(f1)
         all_fold_acc.append(acc)
 
+        if best_state is not None:
+            link_predictor.load_state_dict(best_state)
+        link_predictor.to(device)
         link_predictor.eval()
         with torch.no_grad():
-            test_probabilities,emd, _, _, _, _, att = link_predictor(data_real, snp_gene_real, node_feature, adj_real, data_str, str_inter, feature_str, adj_feature, test_edge_index)
-            test_probabilities = test_probabilities.squeeze().cpu().numpy()  # 取出预测的链接概率
-            test_edge_pre = np.hstack([test_edge, test_probabilities.reshape(-1, 1)])
-            test_edge_pre = pd.DataFrame(test_edge_pre, columns=['SNP', 'gene_name', 'pred'])
-            test_edge_pre = test_edge_pre.groupby(['SNP']).apply(lambda x: x.sort_values(by='pred', ascending=False)).reset_index(drop=True)
-            test_edge_pre['rank'] = test_edge_pre.groupby(['SNP']).cumcount() + 1
-            current_file = os.path.dirname(os.path.abspath(__file__))
-            file_name = current_file + f"/Result/prediction_{fold}_{args.dataset}.txt"
-            np.savetxt(file_name, test_edge_pre, fmt='%s') 
-
-            # save att
-            # beta_cpu = att.detach().cpu().numpy()
-            # emdd_cpu = emd.detach().cpu().numpy()
-            # beta_reshaped = beta_cpu.squeeze(-1).T
-            # np.save(f'{args.dataset}/beta_values_{fold}.npy', beta_reshaped)
-            # np.savetxt(f'{args.dataset}/emd_values.txt', emdd_cpu, fmt='%d')
+            test_probabilities, _, _, _, _, _, _ = link_predictor(
+                data_real, snp_gene_real, node_feature, adj_real, data_str, str_inter,
+                feature_str, adj_feature, test_edge_index_t,
+            )
+            test_probabilities = test_probabilities.squeeze().cpu().numpy()
+            file_name = os.path.join(
+                output_dir, f"prediction_{fold}_{args.dataset}{args.pred_suffix}.txt"
+            )
+            save_predictions(test_edge, test_probabilities, file_name)
+            print(f"Saved: {file_name}")
     
-    # AUC、AUPR and F1
     average_auc = np.mean(all_fold_auc)
     average_aupr = np.mean(all_fold_aupr)
     average_f1 = np.mean(all_fold_f1)
     average_acc = np.mean(all_fold_acc)
 
-    # compute std
     std_auc = np.std(all_fold_auc)
     std_aupr = np.std(all_fold_aupr)
     std_f1 = np.std(all_fold_f1)
     std_acc = np.std(all_fold_acc)
 
-
-    # save result
     average_auc = round(average_auc, 3)
     average_aupr = round(average_aupr, 3)
     average_f1 = round(average_f1, 3)
@@ -397,13 +490,11 @@ if __name__ == '__main__':
     std_f1 = round(std_f1, 3)
     std_acc = round(std_acc, 3)
 
-    # print result
-    print(f"\n10-Fold Cross-Validation Average AUC: {average_auc} ± {std_auc}")
-    print(f"10-Fold Cross-Validation Average AUPR: {average_aupr} ± {std_aupr}")
-    print(f"10-Fold Cross-Validation Average F1: {average_f1} ± {std_f1}")
-    print(f"10-Fold Cross-Validation Average ACC: {average_acc} ± {std_acc}")
+    print(f"\n5-Fold Cross-Validation Average AUC: {average_auc} ± {std_auc}")
+    print(f"5-Fold Cross-Validation Average AUPR: {average_aupr} ± {std_aupr}")
+    print(f"5-Fold Cross-Validation Average F1: {average_f1} ± {std_f1}")
+    print(f"5-Fold Cross-Validation Average ACC: {average_acc} ± {std_acc}")
     
-    # clear memory
     del dual_graph_transformer
     del link_predictor
     torch.cuda.empty_cache()
