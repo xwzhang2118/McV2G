@@ -2,6 +2,10 @@ import os
 import numpy as np
 import pandas as pd
 
+K_VALUES = [1, 3, 5]
+METRIC_BASES = ["Precision", "Recall", "MAP", "NDCG"]
+NUM_REPEATS = 5
+
 # =========================
 # 1. defining evaluation metrics
 # =========================
@@ -27,38 +31,35 @@ def ndcg_at_k(pred_genes, true_genes, k):
     idcg = 0
     for idx, gene in enumerate(pred_genes[:k]):
         if gene in true_genes:
-            dcg += 1 / np.log2(idx + 2)  
+            dcg += 1 / np.log2(idx + 2)  # idx+2 for DCG correction
     for idx in range(min(len(true_genes), k)):
         idcg += 1 / np.log2(idx + 2)
     return dcg / idcg if idcg > 0 else 0
 
 # =========================
-# 2. computing metrics for each snp
+# 2. computing metrics for each snp (Top-1 / Top-3 / Top-5)
 # =========================
-def calculate_metrics_at_k(prediction, reference, k=5):
+def calculate_metrics_multi_k(prediction, reference, k_values=None):
+    if k_values is None:
+        k_values = K_VALUES
     results = []
     ref_dict = reference.groupby('snp')['gene'].apply(set).to_dict()
-    
+    max_k = max(k_values)
+
     for region, group in prediction.groupby('region'):
-        group_sorted = group.sort_values('rank').head(k)
-        pred_genes = group_sorted['gene'].tolist()
+        pred_genes = group.sort_values('rank')['gene'].tolist()
         true_genes = ref_dict.get(region, set())
         if not true_genes:
             continue
-        
-        precision = precision_at_k(pred_genes, true_genes, k)
-        recall = recall_at_k(pred_genes, true_genes, k)
-        map_score = map_at_k(pred_genes, true_genes, k)
-        ndcg = ndcg_at_k(pred_genes, true_genes, k)
-        
-        results.append({
-            'region': region,
-            'Precision@K': precision,
-            'Recall@K': recall,
-            'MAP@K': map_score,
-            'NDCG@K': ndcg
-        })
-    
+
+        row = {'region': region}
+        for k in k_values:
+            row[f'Precision@{k}'] = precision_at_k(pred_genes, true_genes, k)
+            row[f'Recall@{k}'] = recall_at_k(pred_genes, true_genes, k)
+            row[f'MAP@{k}'] = map_at_k(pred_genes, true_genes, k)
+            row[f'NDCG@{k}'] = ndcg_at_k(pred_genes, true_genes, k)
+        results.append(row)
+
     return results
 
 # =========================
@@ -66,39 +67,45 @@ def calculate_metrics_at_k(prediction, reference, k=5):
 # =========================
 if __name__ == '__main__':
     current_file_path = os.path.dirname(os.path.abspath(__file__))
-    reference = pd.read_csv(current_file_path + '/STAD/STAD_l2g.txt', sep='\t')
-    reference = reference[['rsId','gene_symbol']]
-    reference.columns = ['snp','gene']
-    
-    test_snp = pd.read_csv(current_file_path + '/STAD/snp_list_STAD.txt', sep='\t')
+    reference = pd.read_csv(os.path.join(current_file_path, 'STAD', 'STAD_l2g.txt'), sep='\t')
+    # support both old (rsId/gene_symbol) and new (snp/gene) headers
+    colmap = {}
+    if 'rsId' in reference.columns and 'gene_symbol' in reference.columns:
+        colmap = {'rsId': 'snp', 'gene_symbol': 'gene'}
+    elif 'snp' in reference.columns and 'gene' in reference.columns:
+        colmap = {}
+    else:
+        raise KeyError(f'Unexpected STAD_l2g columns: {list(reference.columns)}')
+    if colmap:
+        reference = reference.rename(columns=colmap)
+    reference = reference[['snp', 'gene']]
+
+    test_snp = pd.read_csv(os.path.join(current_file_path, 'STAD', 'snp_list_STAD.txt'), sep='\t')
     test_set = set(test_snp['SNP'])
 
-    precision_all = []
-    recall_all = []
-    mrr_all = []
-    map_all = []
-    ndcg_all = []
+    # Aggregate over five random repeats (mean ± std)
+    repeat_vals = {f'{base}@{k}': [] for base in METRIC_BASES for k in K_VALUES}
 
-    for i in range(0, 5):
-        
-        filename = current_file_path + f'/Result/prediction_{i}_STAD.txt'
-        prediction = pd.read_csv(filename, sep=' ')
-        prediction.columns = ['region', 'gene','post_prob','rank']
+    for repeat in range(NUM_REPEATS):
+        filename = os.path.join(current_file_path, 'Result', f'prediction_{repeat}_STAD.txt')
+        if not os.path.exists(filename):
+            raise FileNotFoundError(f'Missing {filename}. Run McV2G.py first.')
+        prediction = pd.read_csv(
+            filename, sep=r'\s+', header=None, engine='python',
+            names=['region', 'gene', 'post_prob', 'rank'],
+        )
         prediction = prediction[prediction['region'].isin(test_set)]
 
-        # compute metrics
-        metrics = calculate_metrics_at_k(prediction, reference, k=5)
+        metrics = calculate_metrics_multi_k(prediction, reference, k_values=K_VALUES)
         metrics_df = pd.DataFrame(metrics)
 
-        # average metrics
-        avg_metrics = metrics_df[['Precision@K','Recall@K','MAP@K','NDCG@K']].mean()
-        precision_all.append(avg_metrics['Precision@K'])
-        recall_all.append(avg_metrics['Recall@K'])
-        map_all.append(avg_metrics['MAP@K'])
-        ndcg_all.append(avg_metrics['NDCG@K'])
+        for col in repeat_vals:
+            repeat_vals[col].append(metrics_df[col].mean())
 
-    # output results
-    print(f'Precision: {np.mean(precision_all):.3f} ± {np.std(precision_all):.3f}')
-    print(f'Recall: {np.mean(recall_all):.3f} ± {np.std(recall_all):.3f}')
-    print(f'MAP: {np.mean(map_all):.3f} ± {np.std(map_all):.3f}')
-    print(f'NDCG: {np.mean(ndcg_all):.3f} ± {np.std(ndcg_all):.3f}')
+    # output results: Top-1 / Top-3 / Top-5 over five repeats
+    for k in K_VALUES:
+        print(f'=== Top-{k} ===')
+        for base in METRIC_BASES:
+            vals = repeat_vals[f'{base}@{k}']
+            print(f'{base}: {np.mean(vals):.3f} ± {np.std(vals):.3f}')
+        print()

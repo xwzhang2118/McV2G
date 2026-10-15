@@ -25,8 +25,8 @@ def set_seed(seed: int):
 def args_parser():
     parser = argparse.ArgumentParser()
     parser.add_argument('--dataset', type=str, default='STAD', help='Dataset name label for output files')
-    parser.add_argument('--data_dir', type=str, default='', help='Data directory (default: ./STAD)')
-    parser.add_argument('--output_dir', type=str, default='', help='Prediction output directory (default: ./Result)')
+    parser.add_argument('--data_dir', type=str, default='', help='Data directory (default: ../STAD_LD)')
+    parser.add_argument('--output_dir', type=str, default='', help='Prediction output directory')
     parser.add_argument('--pred_suffix', type=str, default='', help='Suffix for prediction files, e.g. _tune_baseline')
     parser.add_argument('--device', type=str, default='cuda:0', help='cuda:0 / cuda:1 / cpu')
     parser.add_argument('--epochs', type=int, default=200, help='Number of epochs to train')
@@ -67,7 +67,7 @@ def build_data_real(node_feature_np, n_snp, adj_real_np):
 
 def load_data(args, device):
     current_file_path = os.path.dirname(os.path.abspath(__file__))
-    data_dir = args.data_dir or os.path.join(current_file_path, 'STAD')
+    data_dir = args.data_dir or os.path.join(current_file_path, '..', 'STAD_LD')
     data_dir = os.path.abspath(data_dir)
 
     test_edge = pd.read_csv(os.path.join(data_dir, 'test_edge_name.txt'), sep=' ', header=None).values
@@ -141,7 +141,7 @@ def get_positive_negative_samples(adj_real, test, lenth, seed=42):
     positive_samples = positive_samples[:, condition_pos[0]]
     negative_samples = negative_samples[:, condition_neg[0]]
     
-    test_set = set(tuple(pair) for pair in test.T)
+    test_set = {(int(i), int(j)) for i, j in test}
     positive_samples_filtered = []
     for i in range(positive_samples.shape[1]):
         pair = (positive_samples[0, i], positive_samples[1, i])
@@ -341,7 +341,7 @@ if __name__ == '__main__':
         device = torch.device('cpu')
     set_seed(args.seed)
     current_file_path = os.path.dirname(os.path.abspath(__file__))
-    output_dir = args.output_dir or os.path.join(current_file_path, 'Result')
+    output_dir = args.output_dir or os.path.join(current_file_path, '..', 'STAD_LD')
     output_dir = os.path.abspath(output_dir)
     print(f"device={device} data_dir={args.data_dir or '(default)'} output_dir={output_dir}")
 
@@ -470,16 +470,19 @@ if __name__ == '__main__':
             save_predictions(test_edge, test_probabilities, file_name)
             print(f"Saved: {file_name}")
     
+    # Average AUC, AUPR, F1, ACC
     average_auc = np.mean(all_fold_auc)
     average_aupr = np.mean(all_fold_aupr)
     average_f1 = np.mean(all_fold_f1)
     average_acc = np.mean(all_fold_acc)
 
+    # Standard deviations
     std_auc = np.std(all_fold_auc)
     std_aupr = np.std(all_fold_aupr)
     std_f1 = np.std(all_fold_f1)
     std_acc = np.std(all_fold_acc)
 
+    # Round to 3 decimal places
     average_auc = round(average_auc, 3)
     average_aupr = round(average_aupr, 3)
     average_f1 = round(average_f1, 3)
@@ -495,6 +498,7 @@ if __name__ == '__main__':
     print(f"5-Fold Cross-Validation Average F1: {average_f1} ± {std_f1}")
     print(f"5-Fold Cross-Validation Average ACC: {average_acc} ± {std_acc}")
     
+    # Free GPU memory
     del dual_graph_transformer
     del link_predictor
     torch.cuda.empty_cache()
