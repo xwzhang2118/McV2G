@@ -294,18 +294,19 @@ class LinkPredictorWithContrastiveLearning(nn.Module):
         self.temperature = temperature
     
     def forward(self, data_real, snp_gene_real, node_feature, adj_real, data_str, str_inter, feature_str, adj_feature, edge_index):
-        # emd
-        emd_all, com1, com2, emd_str, emd_real, att = self.model(data_real, snp_gene_real, node_feature, adj_real, data_str, str_inter, feature_str, adj_feature)
-        
+        # emd (order must match McV2G.forward: output, com1, com2, emd_real, emd_str, att)
+        emd_all, com1, com2, emd_real, emd_str, att = self.model(
+            data_real, snp_gene_real, node_feature, adj_real, data_str, str_inter, feature_str, adj_feature
+        )
+
         # link prediction
         edge_embeds = torch.cat(
             [emd_all[edge_index[:, 0]], emd_all[edge_index[:, 1]]], dim=-1
         )
 
         link_predictions = torch.sigmoid(self.classifier(edge_embeds))
-        
 
-        return link_predictions,emd_all, com1, com2, emd_str, emd_real, att
+        return link_predictions, emd_all, com1, com2, emd_real, emd_str, att
 
     def contrastive_loss(self, embeddings_real, embeddings_str):
         embeddings_real = F.normalize(embeddings_real, dim=1)
@@ -414,7 +415,7 @@ if __name__ == '__main__':
             link_predictor.train()
             optimizer.zero_grad()
             
-            link_predictions, emd, com1, com2, emd_str, emd_real,att = link_predictor(data_real, snp_gene_real, node_feature, adj_real, data_str, str_inter, feature_str, adj_feature, edge_index_train)
+            link_predictions, emd, com1, com2, emd_real, emd_str, att = link_predictor(data_real, snp_gene_real, node_feature, adj_real, data_str, str_inter, feature_str, adj_feature, edge_index_train)
             link_loss = criterion(link_predictions.squeeze(), labels_train)
             contrastive_loss = link_predictor.contrastive_loss(com1, com2)
             loss = link_loss  + t * contrastive_loss
