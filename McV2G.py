@@ -24,9 +24,9 @@ def set_seed(seed: int):
 
 def args_parser():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--dataset', type=str, default='STAD', help='Dataset name label for output files')
-    parser.add_argument('--data_dir', type=str, default='', help='Data directory (default: ../STAD_LD)')
-    parser.add_argument('--output_dir', type=str, default='', help='Prediction output directory')
+    parser.add_argument('--dataset', type=str, default='demo_data', help='Dataset name label for output files')
+    parser.add_argument('--data_dir', type=str, default='', help='Data directory (default: ./demo_data)')
+    parser.add_argument('--output_dir', type=str, default='', help='Prediction output directory (default: ./Result)')
     parser.add_argument('--pred_suffix', type=str, default='', help='Suffix for prediction files, e.g. _tune_baseline')
     parser.add_argument('--device', type=str, default='cuda:0', help='cuda:0 / cuda:1 / cpu')
     parser.add_argument('--epochs', type=int, default=200, help='Number of epochs to train')
@@ -37,11 +37,11 @@ def args_parser():
     parser.add_argument('--dropout', type=float, default=0.5, help='Dropout rate')
     parser.add_argument('--num_heads', type=int, default=4, help='Number of attention heads')
     parser.add_argument('--num_layers', type=int, default=4, help='Number of GCN layers')
-    parser.add_argument('--learning_rate', type=float, default=0.005, help='Learning rate')
+    parser.add_argument('--learning_rate', type=float, default=0.007, help='Learning rate')
     parser.add_argument('--weight_decay', type=float, default=1e-4, help='Adam weight decay')
-    parser.add_argument('--temperature', type=float, default=0.1, help='Contrastive temperature')
+    parser.add_argument('--temperature', type=float, default=0.1, help='Contrastive temperature tau')
     parser.add_argument('--patience', type=int, default=15, help='Early stopping patience')
-    parser.add_argument('--t', type=float, default=0.1, help='Contrastive loss weight')
+    parser.add_argument('--t', type=float, default=0.3, help='Contrastive loss weight beta')
     parser.add_argument('--k', type=int, default=3, help='kNN neighbors for sequence graph')
     parser.add_argument('--seed', type=int, default=42, help='Random seed')
     args = parser.parse_args()
@@ -67,7 +67,7 @@ def build_data_real(node_feature_np, n_snp, adj_real_np):
 
 def load_data(args, device):
     current_file_path = os.path.dirname(os.path.abspath(__file__))
-    data_dir = args.data_dir or os.path.join(current_file_path, '..', 'STAD_LD')
+    data_dir = args.data_dir or os.path.join(current_file_path, 'demo_data')
     data_dir = os.path.abspath(data_dir)
 
     test_edge = pd.read_csv(os.path.join(data_dir, 'test_edge_name.txt'), sep=' ', header=None).values
@@ -262,8 +262,8 @@ class McV2G(nn.Module):
         self.feature_graph = EnhancedHAN(
             in_dim, hidden_dim, out_dim, data_str_graph, num_layers, num_heads, dropout
         )
-        self.attention = Attention(in_dim)
-        self.output_proj = nn.Linear(3*in_dim, out_dim)
+        self.attention = Attention(out_dim)
+        self.output_proj = nn.Linear(3 * out_dim, out_dim)
 
     def forward(self, data_real, snp_gene_real, node_feature, adj_real, data_str, str_inter, feature_str, adj_feature):
         # Personalized
@@ -341,7 +341,7 @@ if __name__ == '__main__':
         device = torch.device('cpu')
     set_seed(args.seed)
     current_file_path = os.path.dirname(os.path.abspath(__file__))
-    output_dir = args.output_dir or os.path.join(current_file_path, '..', 'STAD_LD')
+    output_dir = args.output_dir or os.path.join(current_file_path, 'Result')
     output_dir = os.path.abspath(output_dir)
     print(f"device={device} data_dir={args.data_dir or '(default)'} output_dir={output_dir}")
 

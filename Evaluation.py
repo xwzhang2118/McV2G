@@ -67,7 +67,7 @@ def calculate_metrics_multi_k(prediction, reference, k_values=None):
 # =========================
 if __name__ == '__main__':
     current_file_path = os.path.dirname(os.path.abspath(__file__))
-    reference = pd.read_csv(os.path.join(current_file_path, 'STAD', 'STAD_l2g.txt'), sep='\t')
+    reference = pd.read_csv(os.path.join(current_file_path, 'demo_data', 'demo_data_l2g.txt'), sep='\t')
     # support both old (rsId/gene_symbol) and new (snp/gene) headers
     colmap = {}
     if 'rsId' in reference.columns and 'gene_symbol' in reference.columns:
@@ -75,19 +75,19 @@ if __name__ == '__main__':
     elif 'snp' in reference.columns and 'gene' in reference.columns:
         colmap = {}
     else:
-        raise KeyError(f'Unexpected STAD_l2g columns: {list(reference.columns)}')
+        raise KeyError(f'Unexpected demo_data_l2g columns: {list(reference.columns)}')
     if colmap:
         reference = reference.rename(columns=colmap)
     reference = reference[['snp', 'gene']]
 
-    test_snp = pd.read_csv(os.path.join(current_file_path, 'STAD', 'snp_list_STAD.txt'), sep='\t')
+    test_snp = pd.read_csv(os.path.join(current_file_path, 'demo_data', 'snp_list_demo_data.txt'), sep='\t')
     test_set = set(test_snp['SNP'])
 
     # Aggregate over five random repeats (mean ± std)
     repeat_vals = {f'{base}@{k}': [] for base in METRIC_BASES for k in K_VALUES}
 
     for repeat in range(NUM_REPEATS):
-        filename = os.path.join(current_file_path, 'Result', f'prediction_{repeat}_STAD.txt')
+        filename = os.path.join(current_file_path, 'Result', f'prediction_{repeat}_demo_data.txt')
         if not os.path.exists(filename):
             raise FileNotFoundError(f'Missing {filename}. Run McV2G.py first.')
         prediction = pd.read_csv(

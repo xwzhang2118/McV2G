@@ -6,16 +6,16 @@ McV2G is a graph neural network framework for predicting associations between si
 ## 2. Repository structure (key files)
 - `McV2G.py`: Main script containing model definitions and training loop with cross-validation (includes model classes, training, and evaluation logic).
 - `Evaluation.py`: Script to compute ranking-based evaluation metrics (Precision@K, Recall@K, MAP@K, NDCG@K) from prediction outputs in `Result/`.
-- `STAD/`: Example dataset folder containing files required by the scripts:
-  - `adj_real_2.txt`: Real adjacency matrix (upper-triangular or symmetric format).
-  - `data_2.pth`: PyTorch-saved graph object (e.g., `HeteroData`) used for the real graph.
-  - `feature_str.txt`: Node features used for building a k-NN similarity graph (e.g., sequence features).
-  - `node_feature.txt`: Node feature vectors for all nodes (SNPs first, then genes).
-  - `snp_list_STAD.txt`: List of test SNPs.
-  - `snp_list.txt`: Full list of SNPs (used for indexing/splitting).
-  - `STAD_l2g.txt`: Reference SNP-to-gene associations (used for evaluation).
-  - `test_edge_index.txt` / `test_edge_name.txt`: Index and name files for test edges.
-- `Result/`: Output directory for prediction files. Example files: `prediction_0_STAD.txt` ... `prediction_4_STAD.txt` (one per CV fold/run).
+- `demo_data/`: Example dataset — a small demo pack with the files required by the scripts. Use it to verify installation and workflow; swap in your own data for actual analyses:
+    - `adj_real_2.txt`: Real adjacency matrix (upper-triangular or symmetric format).
+    - `data_2.pth`: PyTorch-saved graph object (e.g., `HeteroData`) used for the real graph.
+    - `feature_str.txt`: Node features used for building a k-NN similarity graph (e.g., sequence features).
+    - `node_feature.txt`: Node feature vectors for all nodes (SNPs first, then genes).
+    - `snp_list_demo_data.txt`: List of test SNPs.
+    - `snp_list.txt`: Full list of SNPs (used for indexing/splitting).
+    - `demo_data_l2g.txt`: Reference SNP-to-gene associations (used for evaluation).
+    - `test_edge_index.txt` / `test_edge_name.txt`: Index and name files for test edges.
+- `Result/`: Output directory for prediction files. Example files: `prediction_0_demo_data.txt` ... `prediction_4_demo_data.txt` (one per repeat; produced from the sample demo run).
 
 ## Method (Overview)
 The following summarizes the main idea of McV2G and points to a schematic (Figure 1) illustrating the framework.
@@ -57,35 +57,38 @@ pip install torch-geometric
 If `pip install torch-geometric` fails, follow the platform-specific installation instructions at https://pytorch-geometric.readthedocs.io/.
 
 ## 4. Quick start: training
-Run training from the repository root (where `McV2G.py` and `STAD/` are located):
+The command below uses the **bundled example dataset** (`demo_data/`) so you can try the pipeline immediately. For real experiments, point `--data_dir` (and related inputs) to your own data in the same file layout.
+
+Run training from the repository root (where `McV2G.py` and `demo_data/` are located):
 
 ```bash
-python McV2G.py --dataset STAD --epochs 200 --in_dim 128 --hidden_dim 256 --out_dim 128 --dropout 0.4 --num_heads 4 --num_layers 4 --learning_rate 0.007 --temperature 0.1 --patience 10 --t 0.1 --k 3
+python McV2G.py --dataset demo_data --data_dir demo_data --output_dir Result --epochs 200 --in_dim 128 --hidden_dim 256 --out_dim 128 --dropout 0.4 --num_heads 4 --num_layers 4 --learning_rate 0.007 --temperature 0.1 --patience 10 --t 0.1 --k 3
 ```
 
 Notes on arguments:
-- `--dataset`: name of the dataset folder (default: `STAD`).
+- `--dataset`: name label for output files (default: `demo_data`; sample-data label only).
+- `--data_dir`: dataset folder (default: `./demo_data`, the example pack).
 - Other flags correspond to `args_parser()` inside `McV2G.py` and can be tuned as needed.
 
-After training, the script will produce prediction files in `Result/` (for example `prediction_0_STAD.txt`, etc.). These files are used by the evaluation script.
+After training, the script will produce prediction files in `Result/` (for example `prediction_0_demo_data.txt`, etc.). These files are used by the evaluation script.
 
 ## 5. Evaluation
-After predictions are produced in `Result/`, run:
+After predictions are produced in `Result/` (from the example or your own data), run:
 
 ```bash
 python Evaluation.py
 ```
 
-`Evaluation.py` will read `Result/prediction_{0..4}_STAD.txt` files and compute the mean and standard deviation of Precision@5, Recall@5, MAP@5, and NDCG@5 across the prediction files.
+`Evaluation.py` will read `Result/prediction_{0..4}_demo_data.txt` files (the default naming for the sample demo) and compute the mean and standard deviation of Precision/Recall/MAP/NDCG at Top-1/3/5 across five repeats.
 
 ## 6. File and format conventions
 - Prediction files (`Result/prediction_*.txt`) are space-separated with columns: `region gene post_prob rank`. `Evaluation.py` treats the first column as the region/SNP identifier.
-- `STAD/STAD_l2g.txt` should contain columns `rsId` and `gene_symbol`; `Evaluation.py` renames these to `snp` and `gene` respectively.
+- `demo_data/demo_data_l2g.txt` should contain columns `rsId` and `gene_symbol` (or `snp`/`gene`); `Evaluation.py` renames these as needed.
 
 ## 7. Troubleshooting
 - CUDA not found: install a PyTorch build that includes CUDA matching your system, or run on CPU.
 - PyG installation issues: use the PyG installation helper and choose the correct wheel for your PyTorch and CUDA versions.
-- File path or parsing issues: `McV2G.py` constructs dataset paths relative to its file location. Ensure `STAD/` exists and files use expected delimiters/encodings.
+- File path or parsing issues: `McV2G.py` constructs dataset paths relative to its file location. Ensure `demo_data/` exists and files use expected delimiters/encodings.
 - Shape/type mismatch errors: verify `node_feature.txt` and `feature_str.txt` have the expected shapes and that SNP/gene indexing matches assumptions in `McV2G.py`.
 
 ## 8. License & contact
