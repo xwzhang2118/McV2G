@@ -77,20 +77,27 @@ def load_data(args, device):
     node_feature = pd.read_csv(
         os.path.join(data_dir, 'node_feature.txt'), sep=' ', header=None
     ).values
-    snp = pd.read_table(os.path.join(data_dir, 'snp_list.txt'), sep='\t').values[:, 0]
-    
+
     adj_real = pd.read_table(
         os.path.join(data_dir, 'adj_real_2.txt'), sep=' ', header=None
     ).values
     snp_gene_real = np.where(np.triu(adj_real) == 1)
     pth_path = os.path.join(data_dir, 'data_2.pth')
+    snp_list_path = os.path.join(data_dir, 'snp_list.txt')
+
     if os.path.exists(pth_path):
         try:
             data_real = torch.load(pth_path, weights_only=False)
         except TypeError:
             data_real = torch.load(pth_path)
+        n_snp = int(data_real['snp'].num_nodes)
+    elif os.path.exists(snp_list_path):
+        n_snp = len(pd.read_table(snp_list_path, sep='\t').values[:, 0])
+        data_real = build_data_real(node_feature, n_snp, adj_real)
     else:
-        data_real = build_data_real(node_feature, len(snp), adj_real)
+        raise FileNotFoundError(
+            f"Need either {pth_path} or {snp_list_path} to determine the SNP/gene split."
+        )
 
     print(data_real)
 
@@ -105,18 +112,26 @@ def load_data(args, device):
         else:
             pad = np.zeros((n - feature_str.shape[0], feature_str.shape[1]), dtype=feature_str.dtype)
             feature_str = np.vstack([feature_str, pad])
-    adj_str= kneighbors_graph(feature_str, k, mode='connectivity', include_self=False).toarray()
+    adj_str = kneighbors_graph(feature_str, k, mode='connectivity', include_self=False).toarray()
     str_inter = np.where(np.triu(adj_str) == 1)
     edges = np.vstack(str_inter).T
-    snp_inter_str = edges[(edges[:, 0] < len(snp)) & (edges[:, 1] < len(snp))]
-    snp_gene = edges[(edges[:, 0] < len(snp)) & (edges[:, 1] >= len(snp))]
-    snp_gene_str = np.vstack((snp_gene[:, 0], snp_gene[:, 1] - len(snp))).T
-    gene_inter = edges[(edges[:, 0] >= len(snp)) & (edges[:, 1] >= len(snp))]
-    gene_inter_str = np.vstack((gene_inter[:, 0] - len(snp), gene_inter[:, 1] - len(snp))).T
+    snp_inter_str = edges[(edges[:, 0] < n_snp) & (edges[:, 1] < n_snp)]
+    snp_gene = edges[(edges[:, 0] < n_snp) & (edges[:, 1] >= n_snp)]
+    snp_gene_str = (
+        np.vstack((snp_gene[:, 0], snp_gene[:, 1] - n_snp)).T
+        if len(snp_gene)
+        else np.zeros((0, 2), dtype=int)
+    )
+    gene_inter = edges[(edges[:, 0] >= n_snp) & (edges[:, 1] >= n_snp)]
+    gene_inter_str = (
+        np.vstack((gene_inter[:, 0] - n_snp, gene_inter[:, 1] - n_snp)).T
+        if len(gene_inter)
+        else np.zeros((0, 2), dtype=int)
+    )
 
     data_str = HeteroData()
-    data_str['snp'].x = torch.tensor(node_feature[:len(snp)], dtype=torch.float)
-    data_str['gene'].x = torch.tensor(node_feature[len(snp):], dtype=torch.float)
+    data_str['snp'].x = torch.tensor(node_feature[:n_snp], dtype=torch.float)
+    data_str['gene'].x = torch.tensor(node_feature[n_snp:], dtype=torch.float)
     data_str['snp', 'to', 'snp'].edge_index = torch.tensor(snp_inter_str, dtype=torch.long).t().contiguous()
     data_str['snp', 'to', 'gene'].edge_index = torch.tensor(snp_gene_str, dtype=torch.long).t().contiguous()
     data_str['gene', 'to', 'gene'].edge_index = torch.tensor(gene_inter_str, dtype=torch.long).t().contiguous()
@@ -128,8 +143,8 @@ def load_data(args, device):
     adj_str = torch.tensor(adj_str, dtype=torch.float).to(device)
     node_feature = torch.tensor(node_feature, dtype=torch.float).to(device)
     feature_str = torch.tensor(feature_str, dtype=torch.float).to(device)
-    
-    return  data_real, snp_gene_real, node_feature, adj_real, data_str, str_inter, feature_str, adj_str, test_edge_index, test_edge, len(snp)
+
+    return data_real, snp_gene_real, node_feature, adj_real, data_str, str_inter, feature_str, adj_str, test_edge_index, test_edge, n_snp
     
 
 def get_positive_negative_samples(adj_real, test, lenth, seed=42):

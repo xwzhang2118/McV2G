@@ -3,23 +3,19 @@
 ## 1. Project overview
 McV2G is a graph neural network framework for predicting associations between single nucleotide polymorphisms (SNPs) and genes. It builds and trains a dual-graph model that leverages a real interaction graph and a feature-based (sequence/similarity) graph, and uses contrastive learning together with link prediction. The implementation uses PyTorch and PyTorch Geometric (PyG).
 
-## 2. Repository structure (key files)
-- `McV2G.py`: Main script containing model definitions and training loop with cross-validation (includes model classes, training, and evaluation logic).
-- `Evaluation.py`: Script to compute ranking-based evaluation metrics (Precision@K, Recall@K, MAP@K, NDCG@K) from prediction outputs in `Result/`.
-- `demo_data/`: Example dataset — a small demo pack with the files required by the scripts. Use it to verify installation and workflow; swap in your own data for actual analyses:
-    - `adj_real_2.txt`: Real adjacency matrix (upper-triangular or symmetric format).
-    - `data_2.pth`: PyTorch-saved graph object (e.g., `HeteroData`) used for the real graph.
-    - `feature_str.txt`: Node features used for building a k-NN similarity graph (e.g., sequence features).
-    - `node_feature.txt`: Node feature vectors for all nodes (SNPs first, then genes).
-    - `snp_list_demo_data.txt`: List of test SNPs.
-    - `snp_list.txt`: Full list of SNPs (used for indexing/splitting).
-    - `demo_data_l2g.txt`: Reference SNP-to-gene associations (used for evaluation).
-    - `test_edge_index.txt` / `test_edge_name.txt`: Index and name files for test edges.
-- `Result/`: Output directory for prediction files. Example files: `prediction_0_demo_data.txt` ... `prediction_4_demo_data.txt` (one per repeat; produced from the sample demo run).
+## 2. Repository structure
+- `McV2G.py`: Main script (model definitions, training loop with 5-fold cross-validation, and prediction export).
+- `environment.yml`: Conda environment export (Python 3.8, PyTorch, PyG, and related packages).
+- `demo_data/`: Example dataset for running the pipeline (sample data only; replace with your own data for real experiments):
+    - `adj_real_2.txt`: Real adjacency matrix.
+    - `data_2.pth`: Prebuilt PyTorch Geometric `HeteroData` for the real SNP–gene graph (also used to obtain the SNP/gene split).
+    - `feature_str.txt`: Features for building the k-NN sequence/similarity graph.
+    - `node_feature.txt`: Node feature matrix (SNPs first, then genes).
+    - `snp_list_demo_data.txt`: Example list of test SNPs (metadata; not required by `McV2G.py`).
+    - `test_edge_index.txt` / `test_edge_name.txt`: Candidate test edges (index and name forms) to score at inference.
+- `Result/`: Output directory for prediction files. Contains `fig1.png` (method schematic).
 
 ## Method (Overview)
-The following summarizes the main idea of McV2G and points to a schematic (Figure 1) illustrating the framework.
-
 To address limitations in current studies, we propose McV2G, a multi-channel graph convolutional network (McGCN) framework for gene prioritization at GWAS variants. Specifically, McV2G is designed with three key points:
 
 - (i) It explicitly models the synergistic effects of multiple loci rather than considering the impact of each SNP in isolation.
@@ -31,65 +27,75 @@ To address limitations in current studies, we propose McV2G, a multi-channel gra
 ## 3. Requirements & dependencies
 Recommended Python: 3.8+.
 
-Primary dependencies (high level):
+Primary packages:
 - torch (PyTorch)
-- torch-geometric (PyG) and its supplementary packages (`torch-scatter`, `torch-sparse`, `torch-cluster`, `torch-spline-conv`, etc.)
+- torch-geometric (PyG)
 - scikit-learn
 - pandas
 - numpy
 
-Note: PyTorch Geometric must be installed for a PyTorch/CUDA combination that matches your environment—use the official PyG installation instructions to pick correct wheels.
-
-Example installation commands (adjust for your CUDA / PyTorch version):
+You can recreate a working environment from the provided export:
 
 ```bash
-# Create and activate a virtual environment
+conda env create -f environment.yml
+conda activate Bio
+```
+
+Or install the core stack manually (adjust CUDA / PyTorch versions as needed):
+
+```bash
 python -m venv .venv && source .venv/bin/activate
 pip install --upgrade pip
-# Base Python packages
 pip install numpy pandas scikit-learn
-# Install PyTorch (replace with the proper CUDA version if needed)
 pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
-# Install PyG (follow the PyG docs for the correct wheel for your setup)
 pip install torch-geometric
 ```
 
-If `pip install torch-geometric` fails, follow the platform-specific installation instructions at https://pytorch-geometric.readthedocs.io/.
+If PyG installation fails, follow https://pytorch-geometric.readthedocs.io/.
 
 ## 4. Quick start: training
-The command below uses the **bundled example dataset** (`demo_data/`) so you can try the pipeline immediately. For real experiments, point `--data_dir` (and related inputs) to your own data in the same file layout.
-
-Run training from the repository root (where `McV2G.py` and `demo_data/` are located):
+The command below uses the bundled example dataset (`demo_data/`). For real experiments, point `--data_dir` to your own data with the same file layout.
 
 ```bash
-python McV2G.py --dataset demo_data --data_dir demo_data --output_dir Result --epochs 200 --in_dim 128 --hidden_dim 256 --out_dim 128 --dropout 0.4 --num_heads 4 --num_layers 4 --learning_rate 0.007 --temperature 0.1 --patience 10 --t 0.1 --k 3
+python McV2G.py --dataset demo_data --data_dir demo_data --output_dir Result --epochs 200 --hidden_dim 256 --out_dim 128 --dropout 0.4 --num_heads 4 --num_layers 4 --learning_rate 0.007 --temperature 0.1 --patience 10 --t 0.1 --k 3
 ```
 
-Notes on arguments:
-- `--dataset`: name label for output files (default: `demo_data`; sample-data label only).
-- `--data_dir`: dataset folder (default: `./demo_data`, the example pack).
-- Other flags correspond to `args_parser()` inside `McV2G.py` and can be tuned as needed.
+Notes:
+- `--dataset`: label used in output filenames (default: `demo_data`).
+- `--data_dir`: dataset folder (default: `./demo_data`).
+- `--output_dir`: where predictions are written (default: `./Result`).
+- Other flags are defined in `args_parser()` inside `McV2G.py`.
 
-After training, the script will produce prediction files in `Result/` (for example `prediction_0_demo_data.txt`, etc.). These files are used by the evaluation script.
+After training, each fold writes a prediction file such as:
 
-## 5. Evaluation
-After predictions are produced in `Result/` (from the example or your own data), run:
-
-```bash
-python Evaluation.py
+```text
+Result/prediction_0_demo_data.txt
+...
+Result/prediction_4_demo_data.txt
 ```
 
-`Evaluation.py` will read `Result/prediction_{0..4}_demo_data.txt` files (the default naming for the sample demo) and compute the mean and standard deviation of Precision/Recall/MAP/NDCG at Top-1/3/5 across five repeats.
+Each line is space-separated: `region gene pred_score rank` (ranked within each region/SNP).
 
-## 6. File and format conventions
-- Prediction files (`Result/prediction_*.txt`) are space-separated with columns: `region gene post_prob rank`. `Evaluation.py` treats the first column as the region/SNP identifier.
-- `demo_data/demo_data_l2g.txt` should contain columns `rsId` and `gene_symbol` (or `snp`/`gene`); `Evaluation.py` renames these as needed.
+## 5. Input data layout
+For a custom dataset, place the following under `--data_dir`:
 
-## 7. Troubleshooting
-- CUDA not found: install a PyTorch build that includes CUDA matching your system, or run on CPU.
-- PyG installation issues: use the PyG installation helper and choose the correct wheel for your PyTorch and CUDA versions.
-- File path or parsing issues: `McV2G.py` constructs dataset paths relative to its file location. Ensure `demo_data/` exists and files use expected delimiters/encodings.
-- Shape/type mismatch errors: verify `node_feature.txt` and `feature_str.txt` have the expected shapes and that SNP/gene indexing matches assumptions in `McV2G.py`.
+| File | Required | Description |
+|------|----------|-------------|
+| `adj_real_2.txt` | yes | Real adjacency matrix |
+| `node_feature.txt` | yes | Node features (SNPs then genes) |
+| `feature_str.txt` | yes | Features for the k-NN similarity graph |
+| `test_edge_index.txt` | yes | Test edge indices to score |
+| `test_edge_name.txt` | yes | Test edge names (`SNP gene`) |
+| `data_2.pth` | recommended | Prebuilt real graph; also provides SNP count |
+| `snp_list.txt` | optional | Full SNP list; only needed if `data_2.pth` is absent |
 
-## 8. License & contact
+Node ordering must be SNPs first, then genes. When `data_2.pth` is present, the number of SNP nodes is taken from that object.
+
+## 6. Troubleshooting
+- CUDA not found: install a matching PyTorch CUDA build, or run with `--device cpu`.
+- PyG install issues: pick wheels that match your PyTorch / CUDA versions.
+- Missing inputs: ensure `demo_data/` (or your `--data_dir`) contains the required files above.
+- Shape / indexing errors: check that `node_feature.txt` and `feature_str.txt` share the same number of rows, and that test-edge indices fall within the node range.
+
+## 7. License & contact
 No license file is included in this repository. Please confirm licensing with the project owner before reuse or redistribution.
