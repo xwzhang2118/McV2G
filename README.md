@@ -7,11 +7,11 @@ McV2G is a graph neural network framework for predicting associations between si
 - `McV2G.py`: Main script (model definitions, training loop with 5-fold cross-validation, and prediction export).
 - `environment.yml`: Conda environment export (Python 3.8, PyTorch, PyG, and related packages).
 - `demo_data/`: Example dataset for running the pipeline (sample data only; replace with your own data for real experiments):
-    - `adj_real_2.txt`: Real adjacency matrix.
-    - `data_2.pth`: Prebuilt PyTorch Geometric `HeteroData` for the real SNP–gene graph (also used to obtain the SNP/gene split).
-    - `feature_str.txt`: Features for building the k-NN sequence/similarity graph.
+    - `adj_real.txt`: Real adjacency matrix.
+    - `data_real.pth`: Prebuilt PyTorch Geometric `HeteroData` for the real SNP–gene graph (also used to obtain the SNP/gene split).
+    - `feature_seq.txt`: Features for building the k-NN sequence/similarity graph.
     - `node_feature.txt`: Node feature matrix (SNPs first, then genes).
-    - `snp_list_demo_data.txt`: Example list of test SNPs (metadata; not required by `McV2G.py`).
+    - `test_snp_list.txt`: Example list of test SNPs (metadata; not required by `McV2G.py`).
     - `test_edge_index.txt` / `test_edge_name.txt`: Candidate test edges (index and name forms) to score at inference.
 - `Result/`: Output directory for prediction files. Contains `fig1.png` (method schematic).
 
@@ -81,21 +81,22 @@ For a custom dataset, place the following under `--data_dir`:
 
 | File | Required | Description |
 |------|----------|-------------|
-| `adj_real_2.txt` | yes | Real adjacency matrix |
+| `adj_real.txt` | yes | Real adjacency matrix |
 | `node_feature.txt` | yes | Node features (SNPs then genes) |
-| `feature_str.txt` | yes | Features for the k-NN similarity graph |
+| `feature_seq.txt` | yes | Features for the k-NN similarity graph |
 | `test_edge_index.txt` | yes | Test edge indices to score |
 | `test_edge_name.txt` | yes | Test edge names (`SNP gene`) |
-| `data_2.pth` | recommended | Prebuilt real graph; also provides SNP count |
-| `snp_list.txt` | optional | Full SNP list; only needed if `data_2.pth` is absent |
+| `data_real.pth` | recommended | Prebuilt real graph; also provides SNP count |
+| `snp_list.txt` | optional | Full SNP list; only needed if `data_real.pth` is absent |
+| `test_snp_list.txt` | optional | Test SNP metadata (not used by training) |
 
-Node ordering must be SNPs first, then genes. When `data_2.pth` is present, the number of SNP nodes is taken from that object.
+Node ordering must be SNPs first, then genes. When `data_real.pth` is present, the number of SNP nodes is taken from that object.
 
 ## 6. Troubleshooting
 - CUDA not found: install a matching PyTorch CUDA build, or run with `--device cpu`.
 - PyG install issues: pick wheels that match your PyTorch / CUDA versions.
 - Missing inputs: ensure `demo_data/` (or your `--data_dir`) contains the required files above.
-- Shape / indexing errors: check that `node_feature.txt` and `feature_str.txt` share the same number of rows, and that test-edge indices fall within the node range.
+- Shape / indexing errors: check that `node_feature.txt` and `feature_seq.txt` share the same number of rows, and that test-edge indices fall within the node range.
 
 ## 7. License & contact
 No license file is included in this repository. Please confirm licensing with the project owner before reuse or redistribution.

@@ -79,10 +79,10 @@ def load_data(args, device):
     ).values
 
     adj_real = pd.read_table(
-        os.path.join(data_dir, 'adj_real_2.txt'), sep=' ', header=None
+        os.path.join(data_dir, 'adj_real.txt'), sep=' ', header=None
     ).values
     snp_gene_real = np.where(np.triu(adj_real) == 1)
-    pth_path = os.path.join(data_dir, 'data_2.pth')
+    pth_path = os.path.join(data_dir, 'data_real.pth')
     snp_list_path = os.path.join(data_dir, 'snp_list.txt')
 
     if os.path.exists(pth_path):
@@ -102,7 +102,7 @@ def load_data(args, device):
     print(data_real)
 
     k = args.k
-    feature_str = pd.read_table(os.path.join(data_dir, 'feature_str.txt'), sep=' ', header=None).values
+    feature_str = pd.read_table(os.path.join(data_dir, 'feature_seq.txt'), sep=' ', header=None).values
     feature_str = np.nan_to_num(feature_str, nan=0.0, posinf=0.0, neginf=0.0)
     if feature_str.shape[0] != node_feature.shape[0]:
         # align rows to node_feature size
