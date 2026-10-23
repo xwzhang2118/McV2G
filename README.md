@@ -6,8 +6,8 @@ McV2G is a graph neural network framework for predicting associations between si
 ## 2. Repository structure
 - `McV2G.py`: Main script (model definitions, training loop with 5-fold cross-validation, and prediction export).
 - `environment.yml`: Conda environment export (Python 3.8, PyTorch, PyG, and related packages).
-- `demo_data/`: Local example dataset (not tracked in git). Prepare your own data under this folder, or any path passed via `--data_dir`, using the file layout in Section 5.
-- `Result/`: Output directory for prediction files. Contains `fig1.png` (method schematic).
+- `demo_data/`: Put input data here (local folder; not tracked in git). You can also use any other directory via `--data_dir`.
+- `Result/`: Prediction outputs are written here. Also contains `fig1.png` (method schematic).
 
 ## Method (Overview)
 To address limitations in current studies, we propose McV2G, a multi-channel graph convolutional network (McGCN) framework for gene prioritization at GWAS variants. Specifically, McV2G is designed with three key points:
@@ -48,49 +48,19 @@ pip install torch-geometric
 If PyG installation fails, follow https://pytorch-geometric.readthedocs.io/.
 
 ## 4. Quick start: training
-Place input files under `demo_data/` (local only; not included in this repository) or point `--data_dir` to your own data with the same file layout.
+1. Place your data under `demo_data/` (or another folder and pass it with `--data_dir`).
+2. Run:
 
 ```bash
 python McV2G.py --dataset demo_data --data_dir demo_data --output_dir Result --epochs 200 --hidden_dim 256 --out_dim 128 --dropout 0.4 --num_heads 4 --num_layers 4 --learning_rate 0.007 --temperature 0.1 --patience 10 --t 0.1 --k 3
 ```
 
-Notes:
-- `--dataset`: label used in output filenames (default: `demo_data`).
-- `--data_dir`: dataset folder (default: `./demo_data`).
-- `--output_dir`: where predictions are written (default: `./Result`).
-- Other flags are defined in `args_parser()` inside `McV2G.py`.
+Predictions are saved to `Result/` (e.g. `prediction_0_demo_data.txt` … `prediction_4_demo_data.txt`), with columns `region gene pred_score rank`.
 
-After training, each fold writes a prediction file such as:
-
-```text
-Result/prediction_0_demo_data.txt
-...
-Result/prediction_4_demo_data.txt
-```
-
-Each line is space-separated: `region gene pred_score rank` (ranked within each region/SNP).
-
-## 5. Input data layout
-For a custom dataset, place the following under `--data_dir`:
-
-| File | Required | Description |
-|------|----------|-------------|
-| `adj_real.txt` | yes | Real adjacency matrix |
-| `node_feature.txt` | yes | Node features (SNPs then genes) |
-| `feature_seq.txt` | yes | Features for the k-NN similarity graph |
-| `test_edge_index.txt` | yes | Test edge indices to score |
-| `test_edge_name.txt` | yes | Test edge names (`SNP gene`) |
-| `data_real.pth` | recommended | Prebuilt real graph; also provides SNP count |
-| `snp_list.txt` | optional | Full SNP list; only needed if `data_real.pth` is absent |
-| `test_snp_list.txt` | optional | Test SNP metadata (not used by training) |
-
-Node ordering must be SNPs first, then genes. When `data_real.pth` is present, the number of SNP nodes is taken from that object.
-
-## 6. Troubleshooting
+## 5. Troubleshooting
 - CUDA not found: install a matching PyTorch CUDA build, or run with `--device cpu`.
 - PyG install issues: pick wheels that match your PyTorch / CUDA versions.
-- Missing inputs: ensure `demo_data/` (or your `--data_dir`) contains the required files above.
-- Shape / indexing errors: check that `node_feature.txt` and `feature_seq.txt` share the same number of rows, and that test-edge indices fall within the node range.
+- Data path issues: make sure `--data_dir` points to the folder where you placed the inputs.
 
-## 7. License & contact
+## 6. License & contact
 No license file is included in this repository. Please confirm licensing with the project owner before reuse or redistribution.
