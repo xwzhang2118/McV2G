@@ -6,13 +6,7 @@ McV2G is a graph neural network framework for predicting associations between si
 ## 2. Repository structure
 - `McV2G.py`: Main script (model definitions, training loop with 5-fold cross-validation, and prediction export).
 - `environment.yml`: Conda environment export (Python 3.8, PyTorch, PyG, and related packages).
-- `demo_data/`: Example dataset for running the pipeline (sample data only; replace with your own data for real experiments):
-    - `adj_real.txt`: Real adjacency matrix.
-    - `data_real.pth`: Prebuilt PyTorch Geometric `HeteroData` for the real SNP–gene graph (also used to obtain the SNP/gene split).
-    - `feature_seq.txt`: Features for building the k-NN sequence/similarity graph.
-    - `node_feature.txt`: Node feature matrix (SNPs first, then genes).
-    - `test_snp_list.txt`: Example list of test SNPs (metadata; not required by `McV2G.py`).
-    - `test_edge_index.txt` / `test_edge_name.txt`: Candidate test edges (index and name forms) to score at inference.
+- `demo_data/`: Local example dataset (not tracked in git). Prepare your own data under this folder, or any path passed via `--data_dir`, using the file layout in Section 5.
 - `Result/`: Output directory for prediction files. Contains `fig1.png` (method schematic).
 
 ## Method (Overview)
@@ -54,7 +48,7 @@ pip install torch-geometric
 If PyG installation fails, follow https://pytorch-geometric.readthedocs.io/.
 
 ## 4. Quick start: training
-The command below uses the bundled example dataset (`demo_data/`). For real experiments, point `--data_dir` to your own data with the same file layout.
+Place input files under `demo_data/` (local only; not included in this repository) or point `--data_dir` to your own data with the same file layout.
 
 ```bash
 python McV2G.py --dataset demo_data --data_dir demo_data --output_dir Result --epochs 200 --hidden_dim 256 --out_dim 128 --dropout 0.4 --num_heads 4 --num_layers 4 --learning_rate 0.007 --temperature 0.1 --patience 10 --t 0.1 --k 3
