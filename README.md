@@ -6,7 +6,7 @@ McV2G is a graph neural network framework for predicting associations between si
 ## 2. Repository structure
 - `McV2G.py`: Main script (model definitions, training loop with 5-fold cross-validation, and prediction export).
 - `environment.yml`: Conda environment export (Python 3.8, PyTorch, PyG, and related packages).
-- `demo_data/`: Put input data here (local folder; not tracked in git). You can also use any other directory via `--data_dir`.
+- `demo_data/`: Empty folder for your input data (data files are not tracked in git). You can also use any other directory via `--data_dir`.
 - `Result/`: Prediction outputs are written here. Also contains `fig1.png` (method schematic).
 
 ## Method (Overview)
